@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entropy Risk Radar | 输入熵 + RAG + 输出熵</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="header-left">
+      <span class="logo">R</span>
+      <div>
+        <h1>Entropy Risk Radar</h1>
+        <p class="subtitle">Prompt 输入熵、RAG 检索熵、Token 输出熵的高风险回答识别演示</p>
+      </div>
+      <span class="version">prompt + rag + output</span>
+    </div>
+    <div class="header-right">
+      <span class="status-dot" id="status-dot"></span>
+      <span class="status-text" id="status-text">READY</span>
+    </div>
+  </header>
+
+  <section class="research-panel">
+    <div class="research-main">
+      <div class="kicker">演示定位</div>
+      <h2>从用户 prompt、检索证据到模型输出，完整观察不确定性如何积累</h2>
+      <p>
+        用户输入的问题叫 prompt。系统会先分析 prompt 本身是否短、泛、含糊；再用 RAG 检索本地知识库或联网证据，计算证据分布是否集中；最后根据模型返回的 token 概率计算输出端不确定性。
+      </p>
+    </div>
+    <div class="member-grid">
+      <div class="member-item">
+        <span>01</span>
+        <b>Prompt 输入熵 H_prompt</b>
+        <p>衡量用户问题的信息分布和含糊程度，过短或泛化问题会提高输入风险。</p>
+      </div>
+      <div class="member-item">
+        <span>02</span>
+        <b>RAG 检索熵 H_ret</b>
+        <p>衡量证据是否集中。证据分散或无证据时，回答依据不稳。</p>
+      </div>
+      <div class="member-item">
+        <span>03</span>
+        <b>输出熵 H_ans</b>
+        <p>根据 token logprobs 定位模型生成时更不确定的位置。</p>
+      </div>
+      <div class="member-item">
+        <span>04</span>
+        <b>综合风险 R</b>
+        <p>把输入、检索、输出、冲突、敏感度和模型先验合成处置建议。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="talk-track">
+    <div>
+      <div class="kicker">讲解口径</div>
+      <p>
+        这里的“输入端”有两层：用户原始 prompt，以及 RAG 拼接进模型上下文的检索证据。前者可做文本分布熵，后者可做证据分布熵。
+      </p>
+    </div>
+    <div class="formula-chip">R = H'_prompt + H'_ret + H'_ans + 冲突/敏感度 + 模型先验</div>
+  </section>
+
+  <section class="input-section">
+    <div class="control-row">
+      <label class="model-label" for="model-select">模型</label>
+      <select id="model-select"></select>
+      <span class="model-note" id="model-note">正在读取模型配置...</span>
+    </div>
+    <div class="custom-model-panel">
+      <label class="custom-toggle">
+        <input type="checkbox" id="custom-enabled" />
+        使用临时 API key 测试自定义模型
+      </label>
+      <div class="custom-model-grid" id="custom-model-grid">
+        <input id="custom-provider" type="text" placeholder="Provider，例如 SiliconFlow / OpenRouter" />
+        <input id="custom-label" type="text" placeholder="显示名称，可选" />
+        <input id="custom-base-url" type="text" placeholder="Base URL，例如 https://api.siliconflow.cn/v1" />
+        <input id="custom-model" type="text" placeholder="Model，例如 Qwen/Qwen2.5-7B-Instruct" />
+        <input id="custom-api-key" type="password" placeholder="API Key，仅本次请求使用" />
+        <input id="custom-risk-bias" type="number" min="0" max="0.25" step="0.01" value="0.10" placeholder="模型先验 0-0.25" />
+        <label class="custom-check">
+          <input type="checkbox" id="custom-completion-mode" />
+          使用 /completions + logprobs
+        </label>
+      </div>
+    </div>
+    <div class="input-row">
+      <input type="text" id="query-input" placeholder="输入 prompt，按回车或点击分析..." />
+      <button id="analyze-btn" onclick="runAnalyze()">分析风险</button>
+    </div>
+    <div class="examples-row">
+      <span class="examples-label">演示问题：</span>
+      <button class="ex-btn" onclick="fillExample(0)">医保报销需要哪些材料？</button>
+      <button class="ex-btn" onclick="fillExample(1)">2026年AI芯片最新进展</button>
+      <button class="ex-btn" onclick="fillExample(2)">异地就医到底需不需要自己先垫付？</button>
+      <button class="ex-btn" onclick="fillExample(3)">火星殖民现在能赚钱吗？</button>
+    </div>
+  </section>
+
+  <div class="info-bar" id="info-bar" style="display:none;">
+    <span>模型：<b id="info-model">-</b></span>
+    <span>检索：<b id="info-retrieval">-</b></span>
+    <span>logprobs：<b id="info-logprobs">-</b></span>
+    <span>模型先验：<b id="info-model-bias">-</b></span>
+    <span>耗时：<b id="info-elapsed">-</b></span>
+  </div>
+
+  <main class="results" id="results-area" style="display:none;">
+    <div class="results-row">
+      <div class="card">
+        <div class="card-head">
+          <span>Prompt 输入端分析</span>
+          <span class="badge" id="h-prompt-badge">-</span>
+        </div>
+        <div class="card-body" id="prompt-analysis"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span>模型回答</span>
+          <span class="badge" id="left-gen-badge">-</span>
+        </div>
+        <div class="card-body answer-body" id="output-answer"></div>
+      </div>
+    </div>
+
+    <div class="results-row">
+      <div class="card">
+        <div class="card-head">
+          <span>RAG 检索证据与 H_ret</span>
+          <span class="badge" id="h-ret-badge">-</span>
+        </div>
+        <div class="card-body" id="chunk-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><span>风险指标面板</span></div>
+        <div class="metrics-grid">
+          <div class="metric" id="chip-hprompt">
+            <div class="metric-name">H_prompt 输入熵</div>
+            <div class="metric-val" id="val-hprompt">-</div>
+            <div class="metric-bar"><div class="metric-fill" id="bar-hprompt"></div></div>
+          </div>
+          <div class="metric" id="chip-hret">
+            <div class="metric-name">H_ret 检索熵</div>
+            <div class="metric-val" id="val-hret">-</div>
+            <div class="metric-bar"><div class="metric-fill" id="bar-hret"></div></div>
+          </div>
+          <div class="metric" id="chip-hans">
+            <div class="metric-name" id="label-hans">H_ans 输出熵</div>
+            <div class="metric-val" id="val-hans">-</div>
+            <div class="metric-bar"><div class="metric-fill" id="bar-hans"></div></div>
+          </div>
+          <div class="metric" id="chip-conflict">
+            <div class="metric-name">S_conflict 冲突度</div>
+            <div class="metric-val" id="val-conflict">-</div>
+            <div class="metric-bar"><div class="metric-fill" id="bar-conflict"></div></div>
+          </div>
+          <div class="metric" id="chip-sensitive">
+            <div class="metric-name">S_sensitive 敏感度</div>
+            <div class="metric-val" id="val-sensitive">-</div>
+            <div class="metric-bar"><div class="metric-fill" id="bar-sensitive"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="token-card">
+      <div class="card-head">
+        <span>Token 级不确定性分析 - <span id="hans-label">H<sub>ans</sub></span></span>
+        <span class="badge" id="h-ans-badge">-</span>
+      </div>
+      <div class="card-body">
+        <div id="output-tokens" class="token-output"></div>
+        <div class="chart-caption">Token log P(x_i)：越低表示模型在该位置越不稳定。</div>
+        <canvas id="logprob-canvas" height="80"></canvas>
+      </div>
+    </div>
+
+    <div class="card" id="gauge-card">
+      <div class="card-head"><span>综合风险与处置建议</span></div>
+      <div class="gauge-area">
+        <canvas id="gauge-canvas" width="240" height="130"></canvas>
+        <div class="risk-verdict" id="risk-verdict">-</div>
+        <div class="risk-formula" id="risk-formula">R = H'_prompt + H'_ret + H'_ans + 冲突/敏感度 + 模型先验</div>
+        <div class="risk-action" id="risk-action"></div>
+        <div class="risk-reasons" id="risk-reasons"></div>
+      </div>
+      <div id="alert-banner">
+        <div class="alert-title" id="alert-title"></div>
+        <div class="alert-body" id="alert-body"></div>
+      </div>
+    </div>
+
+    <section class="effect-panel">
+      <div class="card-head"><span>风险结论生成区</span></div>
+      <div class="effect-grid">
+        <div>
+          <b id="effect-stage">等待分析结果</b>
+          <p id="effect-summary">提交问题后，这里会把输入熵、检索熵和输出熵翻译成风险解释。</p>
+        </div>
+        <ul id="effect-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <div id="loading" style="display:none;">
+    <div class="loader"></div>
+    <p>正在分析 prompt、检索证据、调用模型，并计算熵指标...</p>
+  </div>
+
+  <div id="error-box" style="display:none;"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

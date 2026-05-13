@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: entropy-risk-demo
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/status
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: WEB_SEARCH_ENABLED
+        value: true
+      - key: CORPUS_DIRS
+        value: ./corpus
+      - key: ALLOW_CUSTOM_MODELS
+        value: false
+      - key: DEFAULT_MODEL_ID
+        value: deepseek-chat-legacy
+      - key: OPENAI_BASE_URL
+        value: https://api.deepseek.com/v1
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SILICONFLOW_API_KEY
+        sync: false
+      - key: SERPER_API_KEY
+        sync: false
